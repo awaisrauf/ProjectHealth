@@ -1,12 +1,11 @@
-# Data Analysis of Medical Sales Data of Pakistan
+# Data Analysis of Pharmaceutical Sales Data of Pakistan
 
 - [project webpage](http://orderedlist.github.com/minimal/)
 - [project code]()
 - [project report pdf]()
 
-This is the raw HTML and styles that are used for the *minimal* theme on [GitHub Pages](http://pages.github.com/).
-
-Syntax highlighting is provided on GitHub Pages by [Pygments](http://pygments.org).
+This page represents project Health, an independent data analysis project completed by myself. Several data analysis techniques were 
+used to understand and mine trends from pharmaceutical sales data (2013-2016) of Faisalabad city.  
 
 # License
 
