@@ -1,0 +1,297 @@
+---
+title: "R Notebook"
+output:
+  html_notebook: default
+  html_document: default
+  pdf_document: default
+---
+
+
+#Load the data
+```{r}
+#Set Folder
+setwd("C:/Users/Awais/Dropbox/Freelancing work/Data Mining/implementation/Coding")
+```
+
+Read csv File and make empty cells NA with na.strings=c("", "NA")
+```{r}
+df_MedData <- read.csv("C:\\Users\\Awais\\Dropbox\\Freelancing work\\Data Mining\\implementation\\Dataset\\Final.csv", na.strings=c("", "NA"))
+
+```
+
+
+################
+#Cleaning of data
+
+#################
+```{r}
+# 1) Any row containing word Total will be deleted
+# df_MedData=df_MedData[ grep("Total", df_MedData$Date, invert = TRUE) , ]
+# df_MedData=df_MedData[ grep("Total", df_MedData$Inv..., invert = TRUE) , ]
+# df_MedData=df_MedData[ grep("Total", df_MedData$Product.Name, invert = TRUE) , ]
+# df_MedData=df_MedData[ grep("Total", df_MedData$Gross.Amount, invert = TRUE) , ]
+# df_MedData2<-df_MedData
+# df_MedData=df_MedData[ grep("of:", df_MedData$Date, invert = TRUE) , ]
+# df_MedData=df_MedData[ grep("of:", df_MedData$Inv..., invert = TRUE) , ]
+# df_MedData=df_MedData[ grep("of:", df_MedData$Product.Name, invert = TRUE) , ]
+# df_MedData=df_MedData[ grep("of:", df_MedData$Gross.Amount, invert = TRUE) , ]
+df_MedData3<-df_MedData
+#2) Remove any line with NA values
+df_MedData= df_MedData[complete.cases(df_MedData),]
+df_MedData=na.omit(df_MedData)
+
+#3) Removes row with non numeric Inv... valuess
+dat.IsNum <- !(is.na(as.numeric(df_MedData$Inv...)))
+df_MedData<-df_MedData[(dat.IsNum ),]
+
+#To delete rows if inv... is non numeric 
+df_MedData<-df_MedData[grep("[[:digit:]]", df_MedData$Inv...), ]
+
+#4) Remove row if netAmount>5000 
+df_MedData$Net.Amount<-as.numeric(df_MedData$Net.Amount)
+df_MedData<-df_MedData[!(abs(df_MedData$Net.Amount)>5000 ),]
+
+
+#5) Missing Values compensation
+fillTheBlanks <- function(x, missing=""){
+  rle <- rle(as.character(x))
+  empty <- which(rle$value==missing)
+  rle$values[empty] <- rle$value[empty-1] 
+  inverse.rle(rle)
+}
+
+#Filling Missing Value 
+# if(sum(is.na(df_MedData)))
+# {
+#   for (i in c(1:10))
+#     {
+#      if(i==1 || i==2 ||i==5 ||i==6||i==9)
+#      {
+#        df_MedData[i] <- fillTheBlanks(df_MedData[i])
+#      }
+#      else if(i==3||i==4||i==7||i==8||i==10)
+#      {
+#        na.omit(df_MedData[i])
+#      }
+#     }
+#   
+# }
+
+df_MedData$Net.Amount<-abs(df_MedData$Net.Amount)
+
+#Cleaning Qty variable
+df_MedData$Qty[df_MedData$Qty==0]<-1
+df_MedData$Qty<-abs(df_MedData$Qty)
+df_MedData$Qty<-as.integer(df_MedData$Qty)
+#Summary of the dataset
+#This will show all the unique medicines in the dataset and number of times they appeared
+product=summary((df_MedData$Product.Name))
+write.csv(df_MedData,"CleanData.csv", row.names = TRUE)
+```
+
+
+#Preprocessing
+
+```{r}
+library(plyr)
+df_MedData
+#1) Sort Data with respect to Inv number
+df_sorted <- df_MedData[order(df_MedData$Inv...),]
+df_sorted$Inv... <- as.numeric(df_sorted$Inv...)
+
+#Preprocessing on data to make it useful for basket anaylsis
+df_itemList <- ddply(df_MedData,c("Inv...","Date"), function(df1)paste(df1$Product.Name, collapse = ","))
+#Don't need date and member number here
+df_itemList$Member_number <- NULL
+df_itemList$Date <- NULL
+#df_itemList$Inv...<-c(1,length(df_itemList$item))
+#Rename column headers for ease of use
+colnames(df_itemList) <- c("itemList")
+df_itemList
+#Write the resulting table to a csv file. The reason we do this 
+#is, when we write a dataframe to a .csv file, it attaches a row 
+#number by default. (unless, of course you were to explicitly tell 
+#it not to, by using the argument "row.names=FALSE" in the write.csv function).
+#We can simply use these row numbers as transaction IDs,
+#as they would be unique to each transaction. Convenient?
+write.csv(df_itemList,"ItemList.csv", row.names = TRUE)
+
+#install.packages("arules", dependencies=TRUE)
+library(arules)
+library(arulesViz)
+#Using the read.transactions() functions, we can read the file ItemList.csv and convert it to a transaction format
+txn = read.transactions(file="ItemList.csv", rm.duplicates= TRUE, format="basket",sep=",",cols=1)
+```
+
+
+
+#Simple Statistical Anaylsis
+
+```{r}
+#Installation of 
+#install.packages("plyr", dependencies= TRUE)
+library(plyr)
+
+#2) This two steps makes availabe in two different forms for further anaylsis
+#Total net amount of all the mediciens purchased is stored in this variable
+df_NetAmount<- ddply(df_MedData,.(Date,Inv...),summarize,Net.Amount=sum(abs(Net.Amount)),number=length(Inv...))
+#write.csv(df_NetAmount,"NetAmount.csv", row.names = TRUE)
+
+#total Number of Medicines purchased, 
+#Total.Meds = How much a unique medicine was purchased
+#Total.Customers = total Number of unique customers who purchased q unique medcine
+df_Medicine<- ddply(df_MedData,.(Product.Name),summarize,Total.Meds=sum(abs(Qty)),Total.Customers=length(Inv...))
+df_Medicine <- df_Medicine[order(df_Medicine$Total.Meds),]
+df_Medicine$Total.Sales<- ddply(df_MedData,.(Product.Name),summarize,Total.Sale=sum(abs(Net.Amount)))
+df_Medicine$Total.Sales[1]<-NULL
+df_Medicine <- df_Medicine[order(-df_Medicine$Total.Meds),]
+df_Medicine$Total.Sales<-df_Medicine$Total.Sales$Total.Sale
+
+#write.csv(df_Medicine,"Medicine.csv", row.names = TRUE)
+df_Medicine
+
+#Daily sales of the Data
+df_DailySale<- ddply(df_MedData,.(Date),summarize,Net.Amount=sum(abs(Net.Amount)),number=length(date))
+df_DailySale<-df_DailySale[order(as.Date(df_DailySale$Date, format="%d/%m/%Y")),]
+#write.csv(df_DailySale,"DailySale.csv", row.names = TRUE)
+df_DailySale$Date<-weekdays(as.Date(df_DailySale$Date,'%d/%m/%Y'))
+na.omit(df_DailySale)
+#Daily Sales Anaylsis
+Daily_Sales<-aggregate(df_DailySale$Net.Amount ~ df_DailySale$Date, 
+                       data=df_DailySale, sum)
+#write.csv(df_DailySale,"DailySaleWeekbased.csv", row.names = TRUE)
+Daily_Sales
+
+#Monthly sales anaylsis
+df_DailySaleMonth<- ddply(df_MedData,.(Date),summarize,Net.Amount=sum(abs(Net.Amount)),number=length(date))
+
+df_DailySaleMonth$Date <- months(as.Date(df_DailySaleMonth$Date))
+write.csv(df_DailySaleMonth,"MonthlySale.csv", row.names = TRUE)
+MonthlySale<-aggregate(df_DailySaleMonth$Net.Amount ~ df_DailySaleMonth$Date, 
+                       data=df_DailySaleMonth, sum)
+
+MonthlySale
+
+```
+
+
+```{r}
+df_Medicine
+df_NetAmount
+txn
+```
+
+
+################
+#Basket Rules 
+################
+
+```{r error=TRUE}
+#Quotes are introduced in transactions, which are unnecessary 
+#and result in some incorrect results.
+#So, we must get rid of them:
+#txn@itemInfo$labels <- gsub("\"","",,txn@itemInfo$labels)
+
+basket_rules_Aprior <- apriori(txn,parameter = list(sup = .001, conf = 0.9,target="rules",minlen=2))
+
+
+
+basket_rules_ECLAT<- eclat(txn, parameter = list(sup = 0.001, minlen=2))
+
+#if(sessionInfo()['basePkgs']=="tm" | sessionInfo()['otherPkgs']=="tm"){
+ # detach(package:tm, unload=TRUE)
+#}
+#To see the rules
+#inspect(basket_rules_Aprior)
+#inspect(basket_rules_ECLAT)
+#first sort rules
+#Then find most important ones 
+#then grpah
+#rules<-sort(basket_rules_Aprior, decreasing=TRUE,by="support")
+#inspect(rules[1:5])
+#plot(rules[1:10],method="graph")
+
+#subrules2 = head(sort(inspect(head(top.confidence, 10), by="lift"), 5))
+#plot(subrules2, method="graph", control=list(type="items"))
+
+
+#plot(subrules2, method="graph");
+
+#plot(subrules2, method="graph", control=list(type="items"));
+
+#plot(subrules2, method="paracoord");
+
+#plot(subrules2, method="paracoord", control=list(reorder=TRUE));
+
+#oneRule = sample(rules, 1)
+#subrules <- basket_rules_ECLAT[quality(basket_rules_ECLAT)$confidence > 0.8]
+library('arulesViz')
+#jpeg('bucket.jpg')
+
+#plot(subrules, method="matrix", measure="support")
+
+```
+
+
+
+```{r}
+
+time_Aprior <- vector("numeric", 10L)
+Rules_Aprior <- vector("numeric", 10L)
+for (i in seq(0.00005, .0001, length.out = 10)){
+  k=1
+start.time <- Sys.time()
+basket_rules_Aprior <- apriori(txn,parameter = list(sup = i, conf = 0.9,target="rules",minlen=2))
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+
+time_Aprior[k] <- time.taken
+Rules_Aprior[k] <- length(basket_rules_Aprior)
+k=k+1
+}
+```
+
+
+####################
+#Clustering
+####################
+```{r}
+#Kmean Clutsering
+mydata<-as.data.frame(df_Medicine[2:4])
+set.seed(20)
+medCluster <- kmeans(mydata, 5, nstart = 20)
+#Diffent Types of plots
+library(ggplot2)
+library(fpc)
+library(scatterplot3d)
+#3d cluster plot
+scatterplot3d(mydata,color = medCluster$cluster,angle = 110)
+
+ggplot(df_Medicine, aes(df_Medicine$Total.Meds,df_Medicine$Total.Customers, color = medCluster$cluster)) + geom_point()
+ggplot(df_Medicine, aes(df_Medicine$Total.Meds,df_Medicine$Total.Sales, color = medCluster$cluster)) + geom_point()
+
+ggplot(df_Medicine, aes(df_Medicine$Total.Customers,df_Medicine$Total.Sales, color = medCluster$cluster)) + geom_point()
+
+with(mydata, pairs(mydata, col=c(2:4)[medCluster$cluster]))
+plotcluster(mydata, medCluster$cluster)
+
+
+
+```
+# Ward Hierarchical Clustering
+```{r}
+d <- dist(mydata, method = "euclidean") # distance matrix
+fit <- hclust(d, method="ward.D")
+plot(fit) # display dendogram
+
+groups <- cutree(fit, k=5) # cut tree into 5 clusters
+# draw dendogram with red borders around the 5 clusters 
+abc<-rect.hclust(fit, k=5, border="red")
+#plot(abc)
+
+
+
+
+```
+
+
